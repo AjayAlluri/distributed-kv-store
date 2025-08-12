@@ -19,7 +19,7 @@ distributed-kv/
 ├── cmd/server/          # Main application entry point
 ├── internal/
 │   ├── raft/           # Raft consensus algorithm implementation
-│   ├── storage/        # Key-value storage layer with BoltDB
+│   ├── storage/        # Key-value storage layer with Postgres
 │   ├── api/            # HTTP REST API handlers
 │   └── config/         # Configuration management
 ├── proto/              # Protocol buffer definitions
