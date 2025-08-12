@@ -11,6 +11,7 @@ import (
 type Config struct {
 	Server   ServerConfig   `yaml:"server"`
 	Storage  StorageConfig  `yaml:"storage"`
+	Database DatabaseConfig `yaml:"database"`
 	Raft     RaftConfig     `yaml:"raft"`
 	Logging  LoggingConfig  `yaml:"logging"`
 	Cluster  ClusterConfig  `yaml:"cluster"`
@@ -24,8 +25,22 @@ type ServerConfig struct {
 }
 
 type StorageConfig struct {
-	DataDir    string `yaml:"data_dir"`
-	SyncWrites bool   `yaml:"sync_writes"`
+	Type       string `yaml:"type"`        // "file" or "database"
+	DataDir    string `yaml:"data_dir"`    // For file-based storage
+	SyncWrites bool   `yaml:"sync_writes"` // For file-based storage
+}
+
+type DatabaseConfig struct {
+	Host         string `yaml:"host"`
+	Port         int    `yaml:"port"`
+	Database     string `yaml:"database"`
+	Username     string `yaml:"username"`
+	Password     string `yaml:"password"`
+	SSLMode      string `yaml:"ssl_mode"`
+	MaxConns     int    `yaml:"max_conns"`
+	MinConns     int    `yaml:"min_conns"`
+	MaxConnTime  string `yaml:"max_conn_time"`
+	MaxIdleTime  string `yaml:"max_idle_time"`
 }
 
 type RaftConfig struct {
@@ -62,8 +77,21 @@ func DefaultConfig() *Config {
 			WriteTimeout: "10s",
 		},
 		Storage: StorageConfig{
-			DataDir:    "./data",
+			Type:       "database", // Default to PostgreSQL
+			DataDir:    "./data",   // Fallback for file storage
 			SyncWrites: true,
+		},
+		Database: DatabaseConfig{
+			Host:        "localhost",
+			Port:        5432,
+			Database:    "kvstore",
+			Username:    "postgres",
+			Password:    "",
+			SSLMode:     "prefer",
+			MaxConns:    10,
+			MinConns:    2,
+			MaxConnTime: "1h",
+			MaxIdleTime: "30m",
 		},
 		Raft: RaftConfig{
 			NodeID:           "node-1",
@@ -117,6 +145,7 @@ func LoadConfig(configPath string) (*Config, error) {
 func LoadConfigFromEnv() (*Config, error) {
 	config := DefaultConfig()
 
+	// Server configuration
 	if host := os.Getenv("KV_SERVER_HOST"); host != "" {
 		config.Server.Host = host
 	}
@@ -128,14 +157,49 @@ func LoadConfigFromEnv() (*Config, error) {
 		}
 	}
 
+	// Storage configuration
+	if storageType := os.Getenv("KV_STORAGE_TYPE"); storageType != "" {
+		config.Storage.Type = storageType
+	}
+
 	if dataDir := os.Getenv("KV_DATA_DIR"); dataDir != "" {
 		config.Storage.DataDir = dataDir
 	}
 
+	// Database configuration
+	if dbHost := os.Getenv("KV_DB_HOST"); dbHost != "" {
+		config.Database.Host = dbHost
+	}
+
+	if dbPort := os.Getenv("KV_DB_PORT"); dbPort != "" {
+		var p int
+		if _, err := fmt.Sscanf(dbPort, "%d", &p); err == nil {
+			config.Database.Port = p
+		}
+	}
+
+	if dbName := os.Getenv("KV_DB_NAME"); dbName != "" {
+		config.Database.Database = dbName
+	}
+
+	if dbUser := os.Getenv("KV_DB_USER"); dbUser != "" {
+		config.Database.Username = dbUser
+	}
+
+	if dbPassword := os.Getenv("KV_DB_PASSWORD"); dbPassword != "" {
+		config.Database.Password = dbPassword
+	}
+
+	if sslMode := os.Getenv("KV_DB_SSLMODE"); sslMode != "" {
+		config.Database.SSLMode = sslMode
+	}
+
+	// Raft configuration
 	if nodeID := os.Getenv("KV_NODE_ID"); nodeID != "" {
 		config.Raft.NodeID = nodeID
 	}
 
+	// Logging configuration
 	if logLevel := os.Getenv("KV_LOG_LEVEL"); logLevel != "" {
 		config.Logging.Level = logLevel
 	}
@@ -169,8 +233,34 @@ func (c *Config) validate() error {
 		return fmt.Errorf("invalid server port: %d", c.Server.Port)
 	}
 
-	if c.Storage.DataDir == "" {
-		return fmt.Errorf("data directory cannot be empty")
+	// Validate storage type
+	validStorageTypes := map[string]bool{
+		"file":     true,
+		"database": true,
+	}
+
+	if !validStorageTypes[c.Storage.Type] {
+		return fmt.Errorf("invalid storage type: %s (must be 'file' or 'database')", c.Storage.Type)
+	}
+
+	// Validate based on storage type
+	if c.Storage.Type == "file" {
+		if c.Storage.DataDir == "" {
+			return fmt.Errorf("data directory cannot be empty for file storage")
+		}
+	} else if c.Storage.Type == "database" {
+		if c.Database.Host == "" {
+			return fmt.Errorf("database host cannot be empty")
+		}
+		if c.Database.Port <= 0 || c.Database.Port > 65535 {
+			return fmt.Errorf("invalid database port: %d", c.Database.Port)
+		}
+		if c.Database.Database == "" {
+			return fmt.Errorf("database name cannot be empty")
+		}
+		if c.Database.Username == "" {
+			return fmt.Errorf("database username cannot be empty")
+		}
 	}
 
 	if c.Raft.NodeID == "" {
@@ -199,4 +289,34 @@ func (c *Config) GetServerAddress() string {
 // GetDataPath returns the absolute path to the data directory
 func (c *Config) GetDataPath() (string, error) {
 	return filepath.Abs(c.Storage.DataDir)
+}
+
+// GetPostgreSQLConfig converts DatabaseConfig to PostgreSQLConfig format
+func (c *Config) GetPostgreSQLConfig() PostgreSQLConfig {
+	return PostgreSQLConfig{
+		Host:         c.Database.Host,
+		Port:         c.Database.Port,
+		Database:     c.Database.Database,
+		Username:     c.Database.Username,
+		Password:     c.Database.Password,
+		SSLMode:      c.Database.SSLMode,
+		MaxConns:     c.Database.MaxConns,
+		MinConns:     c.Database.MinConns,
+		MaxConnTime:  c.Database.MaxConnTime,
+		MaxIdleTime:  c.Database.MaxIdleTime,
+	}
+}
+
+// PostgreSQLConfig matches the storage layer's configuration struct
+type PostgreSQLConfig struct {
+	Host         string `yaml:"host"`
+	Port         int    `yaml:"port"`
+	Database     string `yaml:"database"`
+	Username     string `yaml:"username"`
+	Password     string `yaml:"password"`
+	SSLMode      string `yaml:"ssl_mode"`
+	MaxConns     int    `yaml:"max_conns"`
+	MinConns     int    `yaml:"min_conns"`
+	MaxConnTime  string `yaml:"max_conn_time"`
+	MaxIdleTime  string `yaml:"max_idle_time"`
 }

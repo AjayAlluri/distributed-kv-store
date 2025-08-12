@@ -14,6 +14,7 @@ import (
 	"github.com/ajayalluri/distributed-kv-store/internal/config"
 	"github.com/ajayalluri/distributed-kv-store/internal/logging"
 	"github.com/ajayalluri/distributed-kv-store/internal/storage"
+	"github.com/sirupsen/logrus"
 )
 
 var (
@@ -22,6 +23,51 @@ var (
 	buildTime  = "unknown"
 	gitCommit  = "unknown"
 )
+
+// initializeStorage creates the appropriate storage implementation based on configuration
+func initializeStorage(cfg *config.Config, logger *logging.Logger) (api.KVStore, error) {
+	switch cfg.Storage.Type {
+	case "file":
+		dataPath, err := cfg.GetDataPath()
+		if err != nil {
+			return nil, fmt.Errorf("failed to get data path: %w", err)
+		}
+		
+		store, err := storage.NewBoltStore(dataPath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to initialize BoltDB storage: %w", err)
+		}
+		
+		logger.WithField("storage_type", "file").
+			WithField("data_path", dataPath).
+			Info("File-based storage initialized successfully")
+		
+		return store, nil
+		
+	case "database":
+		pgConfig := cfg.GetPostgreSQLConfig()
+		
+		store, err := storage.NewPostgreSQLStore(pgConfig)
+		if err != nil {
+			return nil, fmt.Errorf("failed to initialize PostgreSQL storage: %w", err)
+		}
+		
+		logger.WithField("storage_type", "database").
+			WithFields(logrus.Fields{
+				"db_host":     pgConfig.Host,
+				"db_port":     pgConfig.Port,
+				"db_name":     pgConfig.Database,
+				"db_user":     pgConfig.Username,
+				"max_conns":   pgConfig.MaxConns,
+				"min_conns":   pgConfig.MinConns,
+			}).Info("PostgreSQL storage initialized successfully")
+		
+		return store, nil
+		
+	default:
+		return nil, fmt.Errorf("unsupported storage type: %s", cfg.Storage.Type)
+	}
+}
 
 func main() {
 	flag.Parse()
@@ -52,12 +98,7 @@ func main() {
 	}).Info("Starting distributed key-value store")
 
 	// Initialize storage
-	dataPath, err := cfg.GetDataPath()
-	if err != nil {
-		logger.WithError(err).Fatal("Failed to get data path")
-	}
-
-	store, err := storage.NewBoltStore(dataPath)
+	store, err := initializeStorage(cfg, logger)
 	if err != nil {
 		logger.WithError(err).Fatal("Failed to initialize storage")
 	}
@@ -66,8 +107,6 @@ func main() {
 			logger.WithError(err).Error("Failed to close storage")
 		}
 	}()
-
-	logger.WithField("data_path", dataPath).Info("Storage initialized successfully")
 
 	// Initialize HTTP server
 	server := api.NewServer(store)

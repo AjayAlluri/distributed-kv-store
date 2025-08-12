@@ -14,6 +14,7 @@ type KVStore interface {
 	Get(key string) (string, error)
 	Put(key, value string) error
 	Delete(key string) error
+	Close() error
 }
 
 type Server struct {
