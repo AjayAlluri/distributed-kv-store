@@ -11,7 +11,7 @@ database:
   host: "localhost"
   port: 5432
   database: "kvstore"
-  username: "postgres"
+  username: "ajayalluri"
   password: ""
   ssl_mode: "prefer"
   max_conns: 10

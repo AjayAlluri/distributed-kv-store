@@ -85,7 +85,7 @@ func DefaultConfig() *Config {
 			Host:        "localhost",
 			Port:        5432,
 			Database:    "kvstore",
-			Username:    "postgres",
+			Username:    "ajayalluri",
 			Password:    "",
 			SSLMode:     "prefer",
 			MaxConns:    10,
