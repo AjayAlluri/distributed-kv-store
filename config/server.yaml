@@ -1,0 +1,24 @@
+server:
+  host: "0.0.0.0"
+  port: 8080
+  read_timeout: "10s"
+  write_timeout: "10s"
+
+storage:
+  data_dir: "./data"
+  sync_writes: true
+
+raft:
+  node_id: "node-1"
+  election_timeout: "1s"
+  heartbeat_timeout: "500ms"
+  snapshot_interval: "30s"
+
+logging:
+  level: "info"
+  format: "json"
+  file: ""
+
+cluster:
+  bootstrap: true
+  peers: []
