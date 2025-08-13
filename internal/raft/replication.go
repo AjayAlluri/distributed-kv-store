@@ -112,8 +112,8 @@ func (rn *RaftNode) sendAppendEntries(peerID, peerAddr string, term uint64) {
 }
 
 
-// handleAppendEntries handles an incoming append entries request
-func (rn *RaftNode) handleAppendEntries(req *AppendEntriesRequest) {
+// HandleAppendEntries processes an incoming append entries request synchronously (implements RPCHandler)
+func (rn *RaftNode) HandleAppendEntries(req *AppendEntriesRequest) *AppendEntriesResponse {
 	rn.mu.Lock()
 	defer rn.mu.Unlock()
 
@@ -134,7 +134,7 @@ func (rn *RaftNode) handleAppendEntries(req *AppendEntriesRequest) {
 	// If leader's term is older, reject
 	if req.Term < rn.CurrentTerm {
 		logrus.WithField("node_id", rn.ID).Debug("Rejecting append entries: stale term")
-		return
+		return resp
 	}
 
 	// If leader's term is newer, become follower
@@ -157,7 +157,7 @@ func (rn *RaftNode) handleAppendEntries(req *AppendEntriesRequest) {
 				"prev_log_index": req.PrevLogIndex,
 				"log_length":     len(rn.Log),
 			}).Debug("Rejecting append entries: missing previous entry")
-			return
+			return resp
 		}
 
 		if rn.Log[req.PrevLogIndex].Term != req.PrevLogTerm {
@@ -167,7 +167,7 @@ func (rn *RaftNode) handleAppendEntries(req *AppendEntriesRequest) {
 				"prev_log_term": req.PrevLogTerm,
 				"actual_term":   rn.Log[req.PrevLogIndex].Term,
 			}).Debug("Rejecting append entries: term mismatch")
-			return
+			return resp
 		}
 	}
 
@@ -214,7 +214,47 @@ func (rn *RaftNode) handleAppendEntries(req *AppendEntriesRequest) {
 		}
 	}
 
-	// In real implementation, send response via transport
+	return resp
+}
+
+// handleAppendEntries handles an incoming append entries request via channel (for backward compatibility)
+func (rn *RaftNode) handleAppendEntries(req *AppendEntriesRequest) {
+	// Just call the synchronous handler - response will be ignored in channel-based flow
+	rn.HandleAppendEntries(req)
+}
+
+// HandleInstallSnapshot processes an incoming install snapshot request synchronously (implements RPCHandler)
+func (rn *RaftNode) HandleInstallSnapshot(req *InstallSnapshotRequest) *InstallSnapshotResponse {
+	rn.mu.Lock()
+	defer rn.mu.Unlock()
+
+	logrus.WithFields(logrus.Fields{
+		"node_id": rn.ID,
+		"from":    req.LeaderID,
+		"term":    req.Term,
+	}).Debug("Received install snapshot request")
+
+	resp := &InstallSnapshotResponse{
+		Term: rn.CurrentTerm,
+	}
+
+	// If leader's term is older, reject
+	if req.Term < rn.CurrentTerm {
+		return resp
+	}
+
+	// If leader's term is newer, become follower
+	if req.Term > rn.CurrentTerm {
+		rn.becomeFollower(req.Term)
+		resp.Term = rn.CurrentTerm
+	}
+
+	// Reset election timer since we heard from leader
+	rn.resetElectionTimer()
+
+	// TODO: Implement actual snapshot installation
+	// For now, just acknowledge receipt
+	return resp
 }
 
 // handleAppendEntriesResponse handles a response to append entries

@@ -84,8 +84,23 @@ type RPCTransport interface {
 	// LocalAddr returns the local address of this transport
 	LocalAddr() string
 	
-	// SetRaftNode connects the transport to a Raft node for handling incoming requests
+	// SetRaftHandler connects the transport to a Raft handler for handling incoming requests
+	SetRaftHandler(handler RPCHandler) error
+	
+	// SetRaftNode connects the transport to a Raft node for handling incoming requests (backward compatibility)
 	SetRaftNode(node *RaftNode) error
+}
+
+// RPCHandler interface for handling incoming RPC requests
+type RPCHandler interface {
+	// HandleVoteRequest processes an incoming vote request synchronously
+	HandleVoteRequest(req *VoteRequest) *VoteResponse
+	
+	// HandleAppendEntries processes an incoming append entries request synchronously
+	HandleAppendEntries(req *AppendEntriesRequest) *AppendEntriesResponse
+	
+	// HandleInstallSnapshot processes an incoming install snapshot request synchronously
+	HandleInstallSnapshot(req *InstallSnapshotRequest) *InstallSnapshotResponse
 }
 
 // StateMachine interface for applying committed log entries

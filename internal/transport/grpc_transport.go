@@ -32,8 +32,8 @@ type GRPCTransport struct {
 	// Timeouts
 	requestTimeout time.Duration
 	
-	// Connected Raft node for handling incoming requests
-	raftNode *raft.RaftNode
+	// Connected Raft handler for handling incoming requests
+	raftHandler raft.RPCHandler
 	
 	logger *logrus.Logger
 }
@@ -254,11 +254,11 @@ func (gt *GRPCTransport) SendInstallSnapshot(nodeAddr string, req *raft.InstallS
 // RequestVote handles incoming vote requests
 func (gt *GRPCTransport) RequestVote(ctx context.Context, req *pb.VoteRequest) (*pb.VoteResponse, error) {
 	gt.mu.RLock()
-	raftNode := gt.raftNode
+	raftHandler := gt.raftHandler
 	gt.mu.RUnlock()
 	
-	if raftNode == nil {
-		gt.logger.Error("No Raft node connected to transport")
+	if raftHandler == nil {
+		gt.logger.Error("No Raft handler connected to transport")
 		return &pb.VoteResponse{
 			Term:        0,
 			VoteGranted: false,
@@ -273,39 +273,24 @@ func (gt *GRPCTransport) RequestVote(ctx context.Context, req *pb.VoteRequest) (
 		LastLogTerm:  req.LastLogTerm,
 	}
 	
-	// Send to Raft node via channel with timeout
-	select {
-	case raftNode.VoteRequestCh <- internalReq:
-		// Successfully sent to Raft node
-		// TODO: In a complete implementation, we'd wait for a response
-		// For now, return a neutral response
-		return &pb.VoteResponse{
-			Term:        req.Term,
-			VoteGranted: false,
-		}, nil
-	case <-ctx.Done():
-		gt.logger.Warn("Vote request cancelled by client")
-		return &pb.VoteResponse{
-			Term:        0,
-			VoteGranted: false,
-		}, ctx.Err()
-	case <-time.After(gt.requestTimeout):
-		gt.logger.Warn("Vote request timeout, Raft node channel full")
-		return &pb.VoteResponse{
-			Term:        0,
-			VoteGranted: false,
-		}, nil
-	}
+	// Call Raft handler directly for synchronous processing
+	resp := raftHandler.HandleVoteRequest(internalReq)
+	
+	// Convert internal response to protobuf
+	return &pb.VoteResponse{
+		Term:        resp.Term,
+		VoteGranted: resp.VoteGranted,
+	}, nil
 }
 
 // AppendEntries handles incoming append entries requests
 func (gt *GRPCTransport) AppendEntries(ctx context.Context, req *pb.AppendEntriesRequest) (*pb.AppendEntriesResponse, error) {
 	gt.mu.RLock()
-	raftNode := gt.raftNode
+	raftHandler := gt.raftHandler
 	gt.mu.RUnlock()
 	
-	if raftNode == nil {
-		gt.logger.Error("No Raft node connected to transport")
+	if raftHandler == nil {
+		gt.logger.Error("No Raft handler connected to transport")
 		return &pb.AppendEntriesResponse{
 			Term:    0,
 			Success: false,
@@ -331,29 +316,16 @@ func (gt *GRPCTransport) AppendEntries(ctx context.Context, req *pb.AppendEntrie
 		LeaderCommit: req.LeaderCommit,
 	}
 	
-	// Send to Raft node via channel with timeout
-	select {
-	case raftNode.AppendEntriesCh <- internalReq:
-		// Successfully sent to Raft node
-		// TODO: In a complete implementation, we'd wait for a response
-		// For now, return a neutral response
-		return &pb.AppendEntriesResponse{
-			Term:    req.Term,
-			Success: true,
-		}, nil
-	case <-ctx.Done():
-		gt.logger.Warn("Append entries request cancelled by client")
-		return &pb.AppendEntriesResponse{
-			Term:    0,
-			Success: false,
-		}, ctx.Err()
-	case <-time.After(gt.requestTimeout):
-		gt.logger.Warn("Append entries request timeout, Raft node channel full")
-		return &pb.AppendEntriesResponse{
-			Term:    0,
-			Success: false,
-		}, nil
-	}
+	// Call Raft handler directly for synchronous processing
+	resp := raftHandler.HandleAppendEntries(internalReq)
+	
+	// Convert internal response to protobuf
+	return &pb.AppendEntriesResponse{
+		Term:          resp.Term,
+		Success:       resp.Success,
+		ConflictTerm:  resp.ConflictTerm,
+		ConflictIndex: resp.ConflictIndex,
+	}, nil
 }
 
 // InstallSnapshot handles incoming snapshot requests
@@ -372,17 +344,22 @@ func (gt *GRPCTransport) InstallSnapshot(ctx context.Context, req *pb.InstallSna
 	}, nil
 }
 
-// SetRaftNode connects the transport to a Raft node for handling incoming requests
-func (gt *GRPCTransport) SetRaftNode(node *raft.RaftNode) error {
+// SetRaftHandler connects the transport to a Raft handler for handling incoming requests
+func (gt *GRPCTransport) SetRaftHandler(handler raft.RPCHandler) error {
 	gt.mu.Lock()
 	defer gt.mu.Unlock()
 	
-	if gt.raftNode != nil {
-		return fmt.Errorf("Raft node already connected to transport")
+	if gt.raftHandler != nil {
+		return fmt.Errorf("Raft handler already connected to transport")
 	}
 	
-	gt.raftNode = node
-	gt.logger.WithField("node_id", node.ID).Info("Connected Raft node to gRPC transport")
+	gt.raftHandler = handler
+	gt.logger.Info("Connected Raft handler to gRPC transport")
 	
 	return nil
+}
+
+// SetRaftNode connects the transport to a Raft node for handling incoming requests (backward compatibility)
+func (gt *GRPCTransport) SetRaftNode(node *raft.RaftNode) error {
+	return gt.SetRaftHandler(node)
 }

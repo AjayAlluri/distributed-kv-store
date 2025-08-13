@@ -141,8 +141,8 @@ func (rn *RaftNode) sendVoteRequest(peerID, peerAddr string, req *VoteRequest, v
 	}
 }
 
-// handleVoteRequest handles an incoming vote request
-func (rn *RaftNode) handleVoteRequest(req *VoteRequest) {
+// HandleVoteRequest processes an incoming vote request synchronously (implements RPCHandler)
+func (rn *RaftNode) HandleVoteRequest(req *VoteRequest) *VoteResponse {
 	rn.mu.Lock()
 	defer rn.mu.Unlock()
 
@@ -167,8 +167,7 @@ func (rn *RaftNode) handleVoteRequest(req *VoteRequest) {
 			"node_id": rn.ID,
 			"reason":  "stale_term",
 		}).Debug("Rejecting vote: stale term")
-		// Send response (in real implementation)
-		return
+		return resp
 	}
 
 	// If candidate's term is newer, become follower
@@ -203,7 +202,13 @@ func (rn *RaftNode) handleVoteRequest(req *VoteRequest) {
 		}).Debug("Rejected vote")
 	}
 
-	// In real implementation, send response via transport
+	return resp
+}
+
+// handleVoteRequest handles an incoming vote request via channel (for backward compatibility)
+func (rn *RaftNode) handleVoteRequest(req *VoteRequest) {
+	// Just call the synchronous handler - response will be ignored in channel-based flow
+	rn.HandleVoteRequest(req)
 }
 
 // handleVoteResponse handles a vote response
