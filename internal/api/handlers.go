@@ -2,7 +2,7 @@ package api
 
 import (
 	"encoding/json"
-	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -48,17 +48,34 @@ func (s *Server) handleGet(w http.ResponseWriter, r *http.Request) {
 	key := vars["key"]
 	
 	if key == "" {
-		http.Error(w, "Key is required", http.StatusBadRequest)
+		http.Error(w, `{"error": "Key is required", "code": "MISSING_KEY"}`, http.StatusBadRequest)
 		return
 	}
 
 	value, err := s.store.Get(key)
 	if err != nil {
 		if err.Error() == "key not found" {
-			http.Error(w, "Key not found", http.StatusNotFound)
+			errorResponse := map[string]interface{}{
+				"error": "Key not found",
+				"code":  "KEY_NOT_FOUND",
+				"key":   key,
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusNotFound)
+			json.NewEncoder(w).Encode(errorResponse)
 			return
 		}
-		http.Error(w, fmt.Sprintf("Internal server error: %v", err), http.StatusInternalServerError)
+		
+		errorResponse := map[string]interface{}{
+			"error": "Failed to retrieve key",
+			"code":  "GET_ERROR", 
+			"details": map[string]interface{}{
+				"message": err.Error(),
+			},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(errorResponse)
 		return
 	}
 
@@ -76,7 +93,26 @@ func (s *Server) handlePut(w http.ResponseWriter, r *http.Request) {
 	key := vars["key"]
 	
 	if key == "" {
-		http.Error(w, "Key is required", http.StatusBadRequest)
+		http.Error(w, `{"error": "Key is required", "code": "MISSING_KEY"}`, http.StatusBadRequest)
+		return
+	}
+
+	// Check Content-Type header
+	contentType := r.Header.Get("Content-Type")
+	if contentType != "" && !strings.Contains(contentType, "application/json") {
+		http.Error(w, `{"error": "Content-Type must be application/json", "code": "INVALID_CONTENT_TYPE"}`, http.StatusBadRequest)
+		return
+	}
+
+	// Read and validate request body
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, `{"error": "Failed to read request body", "code": "READ_ERROR"}`, http.StatusBadRequest)
+		return
+	}
+	
+	if len(body) == 0 {
+		http.Error(w, `{"error": "Request body is required", "code": "EMPTY_BODY"}`, http.StatusBadRequest)
 		return
 	}
 
@@ -84,18 +120,41 @@ func (s *Server) handlePut(w http.ResponseWriter, r *http.Request) {
 		Value string `json:"value"`
 	}
 
-	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-		http.Error(w, "Invalid JSON body", http.StatusBadRequest)
+	if err := json.Unmarshal(body, &request); err != nil {
+		// Provide detailed error information
+		errorResponse := map[string]interface{}{
+			"error": "Invalid JSON format",
+			"code":  "INVALID_JSON",
+			"details": map[string]interface{}{
+				"message":     err.Error(),
+				"body_length": len(body),
+				"body_preview": string(body[:min(len(body), 100)]), // First 100 chars
+			},
+		}
+		
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(errorResponse)
 		return
 	}
 
 	if request.Value == "" {
-		http.Error(w, "Value is required", http.StatusBadRequest)
+		http.Error(w, `{"error": "Value is required and cannot be empty", "code": "EMPTY_VALUE"}`, http.StatusBadRequest)
 		return
 	}
 
 	if err := s.store.Put(key, request.Value); err != nil {
-		http.Error(w, fmt.Sprintf("Internal server error: %v", err), http.StatusInternalServerError)
+		errorResponse := map[string]interface{}{
+			"error": "Failed to store key-value pair",
+			"code":  "STORE_ERROR",
+			"details": map[string]interface{}{
+				"message": err.Error(),
+			},
+		}
+		
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(errorResponse)
 		return
 	}
 
@@ -110,21 +169,46 @@ func (s *Server) handlePut(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
+// min returns the minimum of two integers
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
 func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	key := vars["key"]
 	
 	if key == "" {
-		http.Error(w, "Key is required", http.StatusBadRequest)
+		http.Error(w, `{"error": "Key is required", "code": "MISSING_KEY"}`, http.StatusBadRequest)
 		return
 	}
 
 	if err := s.store.Delete(key); err != nil {
 		if err.Error() == "key not found" {
-			http.Error(w, "Key not found", http.StatusNotFound)
+			errorResponse := map[string]interface{}{
+				"error": "Key not found",
+				"code":  "KEY_NOT_FOUND",
+				"key":   key,
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusNotFound)
+			json.NewEncoder(w).Encode(errorResponse)
 			return
 		}
-		http.Error(w, fmt.Sprintf("Internal server error: %v", err), http.StatusInternalServerError)
+		
+		errorResponse := map[string]interface{}{
+			"error": "Failed to delete key",
+			"code":  "DELETE_ERROR",
+			"details": map[string]interface{}{
+				"message": err.Error(),
+			},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(errorResponse)
 		return
 	}
 
