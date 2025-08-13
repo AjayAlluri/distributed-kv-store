@@ -1,0 +1,90 @@
+version: '3.8'
+
+services:
+  # Node 1 - Bootstrap leader
+  kvstore-node-1:
+    build: .
+    container_name: kvstore-node-1
+    environment:
+      - RAFT_NODE_ID=node-1
+    ports:
+      - "8081:8081"
+      - "9001:9001"
+    volumes:
+      - ./data/cluster/node-1:/app/data/cluster/node-1
+      - ./config:/app/config:ro
+    networks:
+      - kvstore-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8081/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  # Node 2 - Follower
+  kvstore-node-2:
+    build: .
+    container_name: kvstore-node-2
+    environment:
+      - RAFT_NODE_ID=node-2
+    ports:
+      - "8082:8082"
+      - "9002:9002"
+    volumes:
+      - ./data/cluster/node-2:/app/data/cluster/node-2
+      - ./config:/app/config:ro
+    networks:
+      - kvstore-network
+    depends_on:
+      - kvstore-node-1
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8082/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  # Node 3 - Follower  
+  kvstore-node-3:
+    build: .
+    container_name: kvstore-node-3
+    environment:
+      - RAFT_NODE_ID=node-3
+    ports:
+      - "8083:8083"
+      - "9003:9003"
+    volumes:
+      - ./data/cluster/node-3:/app/data/cluster/node-3
+      - ./config:/app/config:ro
+    networks:
+      - kvstore-network
+    depends_on:
+      - kvstore-node-1
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8083/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  # Database inspector - utility container
+  db-inspector:
+    image: alpine:latest
+    container_name: kvstore-db-inspector
+    volumes:
+      - ./data:/data:ro
+    networks:
+      - kvstore-network
+    command: >
+      sh -c "
+        apk add --no-cache curl jq &&
+        echo 'Database inspector ready. Use: docker exec -it kvstore-db-inspector sh' &&
+        tail -f /dev/null
+      "
+
+networks:
+  kvstore-network:
+    driver: bridge
+
+volumes:
+  node-1-data:
+  node-2-data:
+  node-3-data:
