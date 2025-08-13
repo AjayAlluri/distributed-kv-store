@@ -66,14 +66,14 @@ type ClientResponse struct {
 
 // RPCTransport interface for sending Raft RPCs between nodes
 type RPCTransport interface {
-	// RequestVote sends a vote request to the specified node
-	RequestVote(nodeID string, req *VoteRequest) (*VoteResponse, error)
+	// SendVoteRequest sends a vote request to the specified node
+	SendVoteRequest(nodeAddr string, req *VoteRequest) (*VoteResponse, error)
 	
-	// AppendEntries sends an append entries request to the specified node
-	AppendEntries(nodeID string, req *AppendEntriesRequest) (*AppendEntriesResponse, error)
+	// SendAppendEntries sends an append entries request to the specified node
+	SendAppendEntries(nodeAddr string, req *AppendEntriesRequest) (*AppendEntriesResponse, error)
 	
-	// InstallSnapshot sends a snapshot to the specified node
-	InstallSnapshot(nodeID string, req *InstallSnapshotRequest) (*InstallSnapshotResponse, error)
+	// SendInstallSnapshot sends a snapshot to the specified node
+	SendInstallSnapshot(nodeAddr string, req *InstallSnapshotRequest) (*InstallSnapshotResponse, error)
 	
 	// Start starts the transport layer
 	Start() error

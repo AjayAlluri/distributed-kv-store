@@ -1,10 +1,8 @@
 package raft
 
 import (
-	"math/rand"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/sirupsen/logrus"
 )
@@ -54,16 +52,16 @@ func (rn *RaftNode) startElection() {
 
 	// Send vote requests to all peers
 	var wg sync.WaitGroup
-	for _, peerID := range rn.Peers {
+	for peerID, peerAddr := range rn.Peers {
 		if peerID == rn.ID {
 			continue
 		}
 
 		wg.Add(1)
-		go func(peer string) {
+		go func(peer string, addr string) {
 			defer wg.Done()
-			rn.sendVoteRequest(peer, req, &votes, needed)
-		}(peerID)
+			rn.sendVoteRequest(peer, addr, req, &votes, needed)
+		}(peerID, peerAddr)
 	}
 
 	// Wait for responses or timeout
@@ -79,54 +77,66 @@ func (rn *RaftNode) startElection() {
 }
 
 // sendVoteRequest sends a vote request to a peer
-func (rn *RaftNode) sendVoteRequest(peerID string, req *VoteRequest, votes *int32, needed int32) {
-	// In a real implementation, this would use the RPC transport
-	// For now, we'll simulate the request
-	
+func (rn *RaftNode) sendVoteRequest(peerID, peerAddr string, req *VoteRequest, votes *int32, needed int32) {
 	logrus.WithFields(logrus.Fields{
 		"node_id": rn.ID,
 		"peer":    peerID,
+		"peer_addr": peerAddr,
 		"term":    req.Term,
 	}).Debug("Sending vote request")
 
-	// Simulate network delay
-	time.Sleep(time.Duration(10+rand.Int63n(40)) * time.Millisecond)
-
-	// Simulate response (in real implementation, this comes from transport)
-	resp := &VoteResponse{
-		Term:        req.Term,
-		VoteGranted: true, // Simplified for now
-	}
-
-	rn.mu.Lock()
-	defer rn.mu.Unlock()
-
-	// Check if we're still a candidate in the same term
-	if rn.State != Candidate || rn.CurrentTerm != req.Term {
+	// Use the transport to send the request
+	resp, err := rn.Transport.SendVoteRequest(peerAddr, req)
+	if err != nil {
+		logrus.WithFields(logrus.Fields{
+			"node_id": rn.ID,
+			"peer":    peerID,
+			"peer_addr": peerAddr,
+			"error":   err,
+		}).Error("Failed to send vote request")
 		return
 	}
 
 	// Handle the response
-	if resp.Term > rn.CurrentTerm {
-		rn.becomeFollower(resp.Term)
-		return
-	}
-
-	if resp.VoteGranted {
-		newVotes := atomic.AddInt32(votes, 1)
+	if resp != nil {
 		logrus.WithFields(logrus.Fields{
-			"node_id": rn.ID,
-			"peer":    peerID,
-			"votes":   newVotes,
-			"needed":  needed,
-		}).Debug("Received vote")
+			"node_id":      rn.ID,
+			"peer":         peerID,
+			"vote_granted": resp.VoteGranted,
+			"term":         resp.Term,
+		}).Debug("Received vote response")
 
-		if newVotes >= needed {
+		rn.mu.Lock()
+		defer rn.mu.Unlock()
+
+		// Check if we're still a candidate in the same term
+		if rn.State != Candidate || rn.CurrentTerm != req.Term {
+			return
+		}
+
+		// Handle the response
+		if resp.Term > rn.CurrentTerm {
+			rn.becomeFollower(resp.Term)
+			return
+		}
+
+		if resp.VoteGranted {
+			newVotes := atomic.AddInt32(votes, 1)
 			logrus.WithFields(logrus.Fields{
 				"node_id": rn.ID,
-				"term":    rn.CurrentTerm,
+				"peer":    peerID,
 				"votes":   newVotes,
-			}).Info("Won election")
+				"needed":  needed,
+			}).Debug("Received vote")
+
+			if newVotes >= needed {
+				logrus.WithFields(logrus.Fields{
+					"node_id": rn.ID,
+					"term":    rn.CurrentTerm,
+					"votes":   newVotes,
+				}).Info("Won election")
+				rn.becomeLeader()
+			}
 		}
 	}
 }

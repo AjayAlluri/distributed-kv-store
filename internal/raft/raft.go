@@ -3,7 +3,6 @@ package raft
 import (
 	"math/rand"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -13,6 +12,7 @@ import (
 func NewRaftNode(config Config) *RaftNode {
 	node := &RaftNode{
 		ID:               config.NodeID,
+		Address:          config.Address,
 		Peers:            config.Peers,
 		State:            Follower,
 		CurrentTerm:      0,
@@ -32,6 +32,7 @@ func NewRaftNode(config Config) *RaftNode {
 		ShutdownCh:       make(chan struct{}),
 		ApplyCh:          config.ApplyCh,
 		Storage:          config.Storage,
+		Transport:        config.Transport,
 	}
 
 	// Initialize log with a dummy entry at index 0
@@ -116,6 +117,11 @@ func (rn *RaftNode) GetLeader() string {
 	// In a real implementation, we'd track the current leader
 	// For now, return empty string if this node is not the leader
 	return ""
+}
+
+// GetMu returns the mutex for external access (use carefully)
+func (rn *RaftNode) GetMu() *sync.RWMutex {
+	return &rn.mu
 }
 
 // Submit submits a command to the Raft cluster
@@ -225,7 +231,7 @@ func (rn *RaftNode) becomeLeader() {
 
 	// Initialize leader state
 	lastLogIndex := uint64(len(rn.Log) - 1)
-	for _, peerID := range rn.Peers {
+	for peerID := range rn.Peers {
 		rn.NextIndex[peerID] = lastLogIndex + 1
 		rn.MatchIndex[peerID] = 0
 	}

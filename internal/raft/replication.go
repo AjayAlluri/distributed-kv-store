@@ -1,7 +1,6 @@
 package raft
 
 import (
-	"math/rand"
 	"sync"
 	"time"
 
@@ -28,16 +27,16 @@ func (rn *RaftNode) sendHeartbeats() {
 
 			// Send heartbeats to all peers
 			var wg sync.WaitGroup
-			for _, peerID := range rn.Peers {
+			for peerID, peerAddr := range rn.Peers {
 				if peerID == rn.ID {
 					continue
 				}
 
 				wg.Add(1)
-				go func(peer string) {
+				go func(peer string, addr string) {
 					defer wg.Done()
-					rn.sendAppendEntries(peer, term)
-				}(peerID)
+					rn.sendAppendEntries(peer, addr, term)
+				}(peerID, peerAddr)
 			}
 			wg.Wait()
 		}
@@ -45,7 +44,7 @@ func (rn *RaftNode) sendHeartbeats() {
 }
 
 // sendAppendEntries sends append entries RPC to a peer
-func (rn *RaftNode) sendAppendEntries(peerID string, term uint64) {
+func (rn *RaftNode) sendAppendEntries(peerID, peerAddr string, term uint64) {
 	rn.mu.RLock()
 	
 	// Double-check we're still leader in the same term
@@ -94,25 +93,24 @@ func (rn *RaftNode) sendAppendEntries(peerID string, term uint64) {
 		"leader_commit":  req.LeaderCommit,
 	}).Debug("Sending append entries")
 
-	// In real implementation, this would use RPC transport
-	// For now, simulate the call
-	resp := rn.simulateAppendEntries(peerID, req)
+	// Use the transport to send the request
+	resp, err := rn.Transport.SendAppendEntries(peerAddr, req)
+	if err != nil {
+		logrus.WithFields(logrus.Fields{
+			"node_id": rn.ID,
+			"peer":    peerID,
+			"peer_addr": peerAddr,
+			"error":   err,
+		}).Error("Failed to send append entries")
+		return
+	}
 	
 	// Handle response
-	rn.handleAppendEntriesResponse(resp)
-}
-
-// simulateAppendEntries simulates an append entries call (replace with real RPC)
-func (rn *RaftNode) simulateAppendEntries(peerID string, req *AppendEntriesRequest) *AppendEntriesResponse {
-	// Simulate network delay
-	time.Sleep(time.Duration(5+rand.Int63n(20)) * time.Millisecond)
-	
-	// Simulate success for now (in real implementation, this would come from the peer)
-	return &AppendEntriesResponse{
-		Term:    req.Term,
-		Success: true,
+	if resp != nil {
+		rn.handleAppendEntriesResponse(resp)
 	}
 }
+
 
 // handleAppendEntries handles an incoming append entries request
 func (rn *RaftNode) handleAppendEntries(req *AppendEntriesRequest) {

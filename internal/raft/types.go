@@ -1,6 +1,7 @@
 package raft
 
 import (
+	"fmt"
 	"sync"
 	"time"
 )
@@ -57,9 +58,9 @@ type LeaderState struct {
 // RaftNode represents a single node in the Raft cluster
 type RaftNode struct {
 	// Node identification
-	ID      string   // Unique identifier for this node
-	Address string   // Network address for this node
-	Peers   []string // List of peer node IDs
+	ID      string            // Unique identifier for this node
+	Address string            // Network address for this node
+	Peers   map[string]string // Node ID -> Address mapping
 
 	// Current state
 	mu          sync.RWMutex
@@ -94,6 +95,9 @@ type RaftNode struct {
 
 	// Storage for persistence
 	Storage PersistentStorage
+	
+	// Transport for network communication
+	Transport RPCTransport
 }
 
 // ApplyMsg represents a message to apply to the state machine
@@ -120,11 +124,13 @@ type PersistentStorage interface {
 // Configuration for Raft node
 type Config struct {
 	NodeID           string
-	Peers            []string
+	Address          string
+	Peers            map[string]string // Node ID -> Address mapping
 	ElectionTimeout  time.Duration
 	HeartbeatTimeout time.Duration
 	Storage          PersistentStorage
 	ApplyCh          chan ApplyMsg
+	Transport        RPCTransport
 }
 
 // Default configuration values
@@ -133,4 +139,12 @@ const (
 	DefaultElectionTimeoutMax  = 300 * time.Millisecond
 	DefaultHeartbeatTimeout    = 50 * time.Millisecond
 	DefaultMaxLogEntriesPerReq = 100
+)
+
+// Common errors
+var (
+	ErrNodeNotFound      = fmt.Errorf("node not found")
+	ErrElectionTimeout   = fmt.Errorf("election timeout")
+	ErrNotLeader         = fmt.Errorf("not leader")
+	ErrInvalidTerm       = fmt.Errorf("invalid term")
 )
