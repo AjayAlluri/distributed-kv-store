@@ -83,6 +83,9 @@ type RPCTransport interface {
 	
 	// LocalAddr returns the local address of this transport
 	LocalAddr() string
+	
+	// SetRaftNode connects the transport to a Raft node for handling incoming requests
+	SetRaftNode(node *RaftNode) error
 }
 
 // StateMachine interface for applying committed log entries

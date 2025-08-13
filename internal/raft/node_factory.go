@@ -70,6 +70,11 @@ func CreateRaftNode(config NodeConfig, transport RPCTransport) (*RaftNode, *Raft
 
 // StartRaftNode starts all components of a Raft node
 func StartRaftNode(raftNode *RaftNode, transport RPCTransport) error {
+	// Connect the transport to the Raft node for incoming request handling
+	if err := transport.SetRaftNode(raftNode); err != nil {
+		return fmt.Errorf("failed to connect transport to Raft node: %w", err)
+	}
+	
 	// Start transport first
 	if err := transport.Start(); err != nil {
 		return fmt.Errorf("failed to start transport: %w", err)
