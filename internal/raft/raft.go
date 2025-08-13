@@ -60,11 +60,11 @@ func (rn *RaftNode) Start() {
 		"peers":   rn.Peers,
 	}).Info("Starting Raft node")
 
+	// Initialize election timer before starting event loop
+	rn.resetElectionTimer()
+
 	// Start the main event loop
 	go rn.eventLoop()
-
-	// Start election timer
-	rn.resetElectionTimer()
 }
 
 // Stop gracefully stops the Raft node
@@ -114,9 +114,8 @@ func (rn *RaftNode) GetLeader() string {
 		return rn.ID
 	}
 	
-	// In a real implementation, we'd track the current leader
-	// For now, return empty string if this node is not the leader
-	return ""
+	// Return the tracked leader ID
+	return rn.LeaderID
 }
 
 // GetMu returns the mutex for external access (use carefully)
@@ -197,6 +196,10 @@ func (rn *RaftNode) becomeFollower(term uint64) {
 	rn.State = Follower
 	rn.CurrentTerm = term
 	rn.VotedFor = ""
+	// Clear leader ID when becoming follower (will be set when we receive valid AppendEntries)
+	if rn.State != Follower {
+		rn.LeaderID = ""
+	}
 	rn.resetElectionTimer()
 	rn.persistState()
 }
@@ -212,6 +215,7 @@ func (rn *RaftNode) becomeCandidate() {
 	rn.State = Candidate
 	rn.CurrentTerm++
 	rn.VotedFor = rn.ID
+	rn.LeaderID = "" // Clear leader ID when becoming candidate
 	rn.resetElectionTimer()
 	rn.persistState()
 
@@ -228,6 +232,7 @@ func (rn *RaftNode) becomeLeader() {
 	}).Info("Becoming leader")
 
 	rn.State = Leader
+	rn.LeaderID = rn.ID // Set ourselves as the leader
 
 	// Initialize leader state
 	lastLogIndex := uint64(len(rn.Log) - 1)

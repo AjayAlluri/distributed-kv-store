@@ -2,6 +2,8 @@ package cluster
 
 import (
 	"fmt"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -228,6 +230,47 @@ func (m *Manager) GetLeaderAddress() string {
 	return ""
 }
 
+// GetLeaderHTTPAddress returns the HTTP address of the current leader
+func (m *Manager) GetLeaderHTTPAddress() string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	
+	if m.leaderID == "" {
+		return ""
+	}
+	
+	if raftAddress, exists := m.config.Nodes[m.leaderID]; exists {
+		return m.convertRaftToHTTPAddress(raftAddress)
+	}
+	
+	return ""
+}
+
+// convertRaftToHTTPAddress converts a Raft address to HTTP address using the port mapping
+func (m *Manager) convertRaftToHTTPAddress(raftAddress string) string {
+	// Simple mapping from Raft ports to HTTP ports
+	// node-1: localhost:9001 -> localhost:8081
+	// node-2: localhost:9002 -> localhost:8082  
+	// node-3: localhost:9003 -> localhost:8083
+	switch raftAddress {
+	case "localhost:9001":
+		return "localhost:8081"
+	case "localhost:9002":
+		return "localhost:8082"
+	case "localhost:9003":
+		return "localhost:8083"
+	default:
+		// Fallback: try to extract host and convert port
+		if host, port, err := parseAddress(raftAddress); err == nil {
+			if raftPort, err := strconv.Atoi(port); err == nil {
+				httpPort := raftPort - 1000 // 9001->8001, 9002->8002, etc.
+				return fmt.Sprintf("%s:%d", host, httpPort)
+			}
+		}
+		return raftAddress // Return original if conversion fails
+	}
+}
+
 // initializeClusterState initializes the cluster state tracking
 func (m *Manager) initializeClusterState() {
 	for nodeID, address := range m.config.Nodes {
@@ -308,4 +351,13 @@ func (m *Manager) updateClusterState() {
 			"term":      term,
 		}).Debug("Detected new leader")
 	}
+}
+
+// parseAddress parses an address into host and port components
+func parseAddress(address string) (string, string, error) {
+	parts := strings.Split(address, ":")
+	if len(parts) != 2 {
+		return "", "", fmt.Errorf("invalid address format: %s", address)
+	}
+	return parts[0], parts[1], nil
 }

@@ -99,7 +99,7 @@ func (cs *ClusterServer) handleDeleteWithForwarding(w http.ResponseWriter, r *ht
 
 // forwardToLeader forwards a request to the current leader
 func (cs *ClusterServer) forwardToLeader(w http.ResponseWriter, r *http.Request) {
-	leaderAddress := cs.manager.GetLeaderAddress()
+	leaderAddress := cs.manager.GetLeaderHTTPAddress()
 	if leaderAddress == "" {
 		cs.logger.Error("No leader available for forwarding")
 		http.Error(w, `{"error": "no leader available", "code": "NO_LEADER"}`, http.StatusServiceUnavailable)

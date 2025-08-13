@@ -142,6 +142,9 @@ func (rn *RaftNode) HandleAppendEntries(req *AppendEntriesRequest) *AppendEntrie
 		rn.becomeFollower(req.Term)
 	}
 
+	// Track the leader ID - we know this is from the current leader
+	rn.LeaderID = req.LeaderID
+
 	// Reset election timer since we heard from leader
 	rn.resetElectionTimer()
 	rn.LastHeartbeat = time.Now()

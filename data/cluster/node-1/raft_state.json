@@ -1,0 +1,18 @@
+{
+  "current_term": 37,
+  "voted_for": "node-1",
+  "log": [
+    {
+      "term": 0,
+      "index": 0,
+      "command": null,
+      "data": null
+    },
+    {
+      "term": 37,
+      "index": 1,
+      "command": "eyJ0eXBlIjoiUFVUIiwia2V5IjoidGVzdCIsInZhbHVlIjoidGVzdGluZyBmb3J3YXJkaW5nIGZpeCJ9",
+      "data": null
+    }
+  ]
+}

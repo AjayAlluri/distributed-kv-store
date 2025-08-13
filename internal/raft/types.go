@@ -67,6 +67,7 @@ type RaftNode struct {
 	State       NodeState
 	CurrentTerm uint64
 	VotedFor    string
+	LeaderID    string     // ID of the current leader (empty if unknown)
 	Log         []LogEntry
 
 	// Volatile state

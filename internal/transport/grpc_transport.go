@@ -2,6 +2,7 @@ package transport
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net"
 	"sync"
@@ -176,10 +177,34 @@ func (gt *GRPCTransport) SendAppendEntries(nodeAddr string, req *raft.AppendEntr
 	// Convert internal request to protobuf
 	pbEntries := make([]*pb.LogEntry, len(req.Entries))
 	for i, entry := range req.Entries {
+		var data []byte
+		
+		// If entry has a Command, serialize it to Data field
+		if entry.Command != nil {
+			if entry.Data != nil {
+				// Use existing Data if available
+				data = entry.Data
+			} else {
+				// Serialize Command to JSON for transport
+				var err error
+				data, err = json.Marshal(entry.Command)
+				if err != nil {
+					gt.logger.WithFields(logrus.Fields{
+						"index": entry.Index,
+						"term":  entry.Term,
+						"error": err,
+					}).Error("Failed to serialize command for transport")
+					continue // Skip this entry
+				}
+			}
+		} else {
+			data = entry.Data
+		}
+		
 		pbEntries[i] = &pb.LogEntry{
 			Term:  entry.Term,
 			Index: entry.Index,
-			Data:  entry.Data,
+			Data:  data,
 		}
 	}
 	
@@ -300,11 +325,27 @@ func (gt *GRPCTransport) AppendEntries(ctx context.Context, req *pb.AppendEntrie
 	// Convert protobuf request to internal type
 	entries := make([]raft.LogEntry, len(req.Entries))
 	for i, pbEntry := range req.Entries {
-		entries[i] = raft.LogEntry{
+		entry := raft.LogEntry{
 			Term:  pbEntry.Term,
 			Index: pbEntry.Index,
 			Data:  pbEntry.Data,
 		}
+		
+		// If entry has data, try to deserialize it as a KVCommand
+		if len(pbEntry.Data) > 0 {
+			if kvCmd, err := raft.DeserializeCommand(pbEntry.Data); err != nil {
+				gt.logger.WithFields(logrus.Fields{
+					"index": pbEntry.Index,
+					"term":  pbEntry.Term,
+					"error": err,
+				}).Debug("Failed to deserialize command data, keeping as raw bytes")
+				// Keep as raw data if deserialization fails
+			} else {
+				entry.Command = kvCmd
+			}
+		}
+		
+		entries[i] = entry
 	}
 	
 	internalReq := &raft.AppendEntriesRequest{
