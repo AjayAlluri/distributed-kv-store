@@ -34,7 +34,7 @@ type AppendEntriesResponse struct {
 	ConflictIndex uint64 `json:"conflict_index,omitempty"` // First index with ConflictTerm
 }
 
-// InstallSnapshotRequest represents the InstallSnapshot RPC request (for future implementation)
+// InstallSnapshotRequest represents the InstallSnapshot RPC request
 type InstallSnapshotRequest struct {
 	Term              uint64 `json:"term"`               // Leader's term
 	LeaderID          string `json:"leader_id"`          // So follower can redirect clients
@@ -43,11 +43,15 @@ type InstallSnapshotRequest struct {
 	Offset            uint64 `json:"offset"`             // Byte offset where chunk is positioned in snapshot file
 	Data              []byte `json:"data"`               // Raw bytes of snapshot chunk
 	Done              bool   `json:"done"`               // True if this is the last chunk
+	TotalSize         uint64 `json:"total_size"`         // Total size of the complete snapshot
+	Checksum          uint64 `json:"checksum"`           // Checksum of complete snapshot for verification
 }
 
 // InstallSnapshotResponse represents the InstallSnapshot RPC response
 type InstallSnapshotResponse struct {
-	Term uint64 `json:"term"` // CurrentTerm, for leader to update itself
+	Term          uint64 `json:"term"`           // CurrentTerm, for leader to update itself
+	Success       bool   `json:"success"`        // True if snapshot chunk was successfully received
+	BytesReceived uint64 `json:"bytes_received"` // Number of bytes successfully received so far
 }
 
 // ClientRequest represents a client request to the leader

@@ -57,6 +57,16 @@ message LogEntry {
   bytes data = 3;     // Serialized command data
 }
 
+// Snapshot represents a point-in-time state machine snapshot
+message Snapshot {
+  uint64 last_included_index = 1; // The snapshot replaces all entries up through this index
+  uint64 last_included_term = 2;  // Term of last_included_index
+  bytes state_machine_data = 3;   // Serialized state machine data
+  repeated string membership = 4;  // Current cluster membership
+  int64 timestamp = 5;            // Unix timestamp when snapshot was created
+  uint64 checksum = 6;            // CRC32 checksum for integrity verification
+}
+
 // InstallSnapshotRequest message for snapshot transfers
 message InstallSnapshotRequest {
   uint64 term = 1;               // Leader's term
@@ -66,9 +76,13 @@ message InstallSnapshotRequest {
   uint64 offset = 5;             // Byte offset where chunk is positioned in snapshot file
   bytes data = 6;                // Raw bytes of snapshot chunk
   bool done = 7;                 // True if this is the last chunk
+  uint64 total_size = 8;         // Total size of the complete snapshot
+  uint64 checksum = 9;           // Checksum of complete snapshot for verification
 }
 
 // InstallSnapshotResponse message for snapshot transfers
 message InstallSnapshotResponse {
-  uint64 term = 1; // Current term, for leader to update itself
+  uint64 term = 1;    // Current term, for leader to update itself
+  bool success = 2;   // True if snapshot chunk was successfully received
+  uint64 bytes_received = 3; // Number of bytes successfully received so far
 }

@@ -234,17 +234,24 @@ func (rn *RaftNode) HandleInstallSnapshot(req *InstallSnapshotRequest) *InstallS
 	defer rn.mu.Unlock()
 
 	logrus.WithFields(logrus.Fields{
-		"node_id": rn.ID,
-		"from":    req.LeaderID,
-		"term":    req.Term,
+		"node_id":             rn.ID,
+		"from":                req.LeaderID,
+		"term":                req.Term,
+		"last_included_index": req.LastIncludedIndex,
+		"last_included_term":  req.LastIncludedTerm,
+		"offset":              req.Offset,
+		"data_size":           len(req.Data),
+		"done":                req.Done,
 	}).Debug("Received install snapshot request")
 
 	resp := &InstallSnapshotResponse{
-		Term: rn.CurrentTerm,
+		Term:    rn.CurrentTerm,
+		Success: false,
 	}
 
 	// If leader's term is older, reject
 	if req.Term < rn.CurrentTerm {
+		logrus.WithField("node_id", rn.ID).Debug("Rejecting install snapshot: stale term")
 		return resp
 	}
 
@@ -254,11 +261,60 @@ func (rn *RaftNode) HandleInstallSnapshot(req *InstallSnapshotRequest) *InstallS
 		resp.Term = rn.CurrentTerm
 	}
 
+	// Track the leader ID
+	rn.LeaderID = req.LeaderID
+
 	// Reset election timer since we heard from leader
 	rn.resetElectionTimer()
+	rn.LastHeartbeat = time.Now()
 
-	// TODO: Implement actual snapshot installation
-	// For now, just acknowledge receipt
+	// Check if snapshot is stale (we already have a more recent snapshot)
+	if req.LastIncludedIndex <= rn.LastSnapshotIndex {
+		logrus.WithFields(logrus.Fields{
+			"node_id":                    rn.ID,
+			"request_last_included":      req.LastIncludedIndex,
+			"current_last_snapshot":      rn.LastSnapshotIndex,
+		}).Debug("Rejecting install snapshot: already have more recent snapshot")
+		resp.Success = true // Not an error, just already have it
+		return resp
+	}
+
+	// If this is the first chunk, prepare for receiving snapshot
+	if req.Offset == 0 {
+		rn.prepareSnapshotInstallation(req)
+	}
+
+	// Accumulate snapshot data
+	if err := rn.accumulateSnapshotData(req); err != nil {
+		logrus.WithFields(logrus.Fields{
+			"node_id": rn.ID,
+			"error":   err,
+		}).Error("Failed to accumulate snapshot data")
+		return resp
+	}
+
+	// If this is the last chunk, install the snapshot
+	if req.Done {
+		if err := rn.finalizeSnapshotInstallation(req); err != nil {
+			logrus.WithFields(logrus.Fields{
+				"node_id": rn.ID,
+				"error":   err,
+			}).Error("Failed to finalize snapshot installation")
+			return resp
+		}
+		
+		logrus.WithFields(logrus.Fields{
+			"node_id":             rn.ID,
+			"last_included_index": req.LastIncludedIndex,
+			"last_included_term":  req.LastIncludedTerm,
+		}).Info("Successfully installed snapshot")
+	}
+
+	resp.Success = true
+	if rn.pendingSnapshotData != nil {
+		resp.BytesReceived = uint64(len(rn.pendingSnapshotData))
+	}
+	
 	return resp
 }
 
@@ -390,6 +446,9 @@ func (rn *RaftNode) applyCommittedEntries() {
 		rn.LastApplied = entry.Index
 		rn.mu.Unlock()
 	}
+	
+	// Check if we should create a snapshot after applying entries
+	rn.checkAndCreateSnapshot()
 }
 
 // min returns the minimum of two uint64 values

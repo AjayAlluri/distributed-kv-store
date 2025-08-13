@@ -124,8 +124,13 @@ func (sm *KVStateMachine) Size() int {
 	return len(sm.data)
 }
 
-// Snapshot creates a snapshot of the current state
+// Snapshot creates a snapshot of the current state (implements StateMachine interface)
 func (sm *KVStateMachine) Snapshot() ([]byte, error) {
+	return sm.CreateSnapshot()
+}
+
+// CreateSnapshot creates a snapshot of the current state  
+func (sm *KVStateMachine) CreateSnapshot() ([]byte, error) {
 	sm.mu.RLock()
 	defer sm.mu.RUnlock()
 	
@@ -143,8 +148,13 @@ func (sm *KVStateMachine) Snapshot() ([]byte, error) {
 	return data, nil
 }
 
-// Restore restores the state machine from a snapshot
+// Restore restores the state machine from a snapshot (implements StateMachine interface)
 func (sm *KVStateMachine) Restore(snapshot []byte) error {
+	return sm.RestoreSnapshot(snapshot)
+}
+
+// RestoreSnapshot restores the state machine from a snapshot
+func (sm *KVStateMachine) RestoreSnapshot(snapshot []byte) error {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 	

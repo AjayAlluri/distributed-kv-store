@@ -99,6 +99,19 @@ type RaftNode struct {
 	
 	// Transport for network communication
 	Transport RPCTransport
+	
+	// State machine for applying commands
+	StateMachine StateMachine
+	
+	// Snapshot-related fields
+	LastSnapshot      *Snapshot
+	LastSnapshotIndex uint64
+	LastSnapshotTerm  uint64
+	SnapshotConfig    *SnapshotConfig
+	
+	// Pending snapshot installation data
+	pendingSnapshotData   []byte
+	pendingSnapshotOffset uint64
 }
 
 // ApplyMsg represents a message to apply to the state machine
@@ -121,6 +134,7 @@ type PersistentStorage interface {
 	SaveSnapshot(snapshot []byte, lastIncludedIndex, lastIncludedTerm uint64) error
 	LoadSnapshot() ([]byte, uint64, uint64, error)
 }
+
 
 // Configuration for Raft node
 type Config struct {
