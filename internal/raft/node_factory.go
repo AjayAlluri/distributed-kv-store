@@ -139,6 +139,12 @@ func validateNodeConfig(config NodeConfig) error {
 		return fmt.Errorf("heartbeat timeout must be less than election timeout")
 	}
 	
+	// Ensure proper ratio for stable operation
+	ratio := float64(config.ElectionTimeout) / float64(config.HeartbeatTimeout)
+	if ratio < 3.0 {
+		return fmt.Errorf("election timeout should be at least 3x heartbeat timeout (current ratio: %.1f)", ratio)
+	}
+	
 	if config.Logger == nil {
 		return fmt.Errorf("logger cannot be nil")
 	}

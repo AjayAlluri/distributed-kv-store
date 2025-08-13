@@ -173,15 +173,27 @@ func (rn *RaftNode) persistState() {
 	}
 }
 
-// resetElectionTimer resets the election timeout with a random duration
+// resetElectionTimer resets the election timeout with an optimized random duration
 func (rn *RaftNode) resetElectionTimer() {
 	if rn.ElectionTimer != nil {
 		rn.ElectionTimer.Stop()
 	}
 
-	// Random timeout to avoid split votes
-	timeout := rn.ElectionTimeout + time.Duration(rand.Int63n(int64(rn.ElectionTimeout)))
+	// Optimized randomization: base timeout + random jitter up to 50% of base
+	// This provides sufficient randomization while enabling faster convergence
+	baseTimeout := rn.ElectionTimeout
+	maxJitter := baseTimeout / 2 // 50% jitter instead of 100%
+	jitter := time.Duration(rand.Int63n(int64(maxJitter)))
+	timeout := baseTimeout + jitter
+	
 	rn.ElectionTimer = time.NewTimer(timeout)
+	
+	logrus.WithFields(logrus.Fields{
+		"node_id":      rn.ID,
+		"base_timeout": baseTimeout,
+		"jitter":       jitter,
+		"total_timeout": timeout,
+	}).Debug("Reset election timer with optimized randomization")
 }
 
 // becomeFollower transitions the node to follower state

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v3"
@@ -47,19 +48,35 @@ func LoadClusterConfig(configPath string, logger *logrus.Logger) (*ClusterConfig
 		return nil, fmt.Errorf("invalid cluster configuration: %w", err)
 	}
 	
+	// Convert timing values to time.Duration with optimized defaults
+	electionTimeout := time.Duration(config.Raft.ElectionTimeoutMs) * time.Millisecond
+	heartbeatTimeout := time.Duration(config.Raft.HeartbeatTimeoutMs) * time.Millisecond
+	
+	// Use optimized defaults if not specified
+	if electionTimeout == 0 {
+		electionTimeout = 100 * time.Millisecond // Optimized: faster than default 200ms
+	}
+	if heartbeatTimeout == 0 {
+		heartbeatTimeout = 25 * time.Millisecond // Optimized: faster than default 50ms
+	}
+	
 	// Convert to internal format
 	clusterConfig := &ClusterConfig{
-		Nodes:       config.Cluster.Nodes,
-		BootstrapID: config.Cluster.BootstrapID,
-		DataDir:     config.Cluster.DataDir,
-		Logger:      logger,
+		Nodes:            config.Cluster.Nodes,
+		BootstrapID:      config.Cluster.BootstrapID,
+		DataDir:          config.Cluster.DataDir,
+		ElectionTimeout:  electionTimeout,
+		HeartbeatTimeout: heartbeatTimeout,
+		Logger:           logger,
 	}
 	
 	logger.WithFields(logrus.Fields{
-		"cluster_name": config.Cluster.Name,
-		"nodes":        len(config.Cluster.Nodes),
-		"bootstrap_id": config.Cluster.BootstrapID,
-		"data_dir":     config.Cluster.DataDir,
+		"cluster_name":      config.Cluster.Name,
+		"nodes":             len(config.Cluster.Nodes),
+		"bootstrap_id":      config.Cluster.BootstrapID,
+		"data_dir":          config.Cluster.DataDir,
+		"election_timeout":  electionTimeout,
+		"heartbeat_timeout": heartbeatTimeout,
 	}).Info("Loaded cluster configuration")
 	
 	return clusterConfig, nil
@@ -104,6 +121,28 @@ func validateClusterConfig(config *ClusterConfigFile) error {
 		logrus.Warn("Even number of nodes detected - odd numbers are recommended for Raft clusters")
 	}
 	
+	// Validate Raft timing configuration
+	if config.Raft.ElectionTimeoutMs < 0 {
+		return fmt.Errorf("election timeout cannot be negative")
+	}
+	if config.Raft.HeartbeatTimeoutMs < 0 {
+		return fmt.Errorf("heartbeat timeout cannot be negative")
+	}
+	
+	// Ensure heartbeat is significantly smaller than election timeout for proper operation
+	if config.Raft.ElectionTimeoutMs > 0 && config.Raft.HeartbeatTimeoutMs > 0 {
+		ratio := float64(config.Raft.ElectionTimeoutMs) / float64(config.Raft.HeartbeatTimeoutMs)
+		if ratio < 3.0 {
+			return fmt.Errorf("election timeout should be at least 3x heartbeat timeout (current ratio: %.1f)", ratio)
+		}
+		if config.Raft.HeartbeatTimeoutMs < 10 {
+			logrus.Warn("Very low heartbeat timeout (<10ms) - may cause excessive network traffic")
+		}
+		if config.Raft.ElectionTimeoutMs > 1000 {
+			logrus.Warn("Very high election timeout (>1000ms) - may cause slow leader election")
+		}
+	}
+	
 	return nil
 }
 
@@ -129,8 +168,8 @@ func CreateExampleConfig(path string) error {
 			ElectionTimeoutMs  int `yaml:"election_timeout_ms"`
 			HeartbeatTimeoutMs int `yaml:"heartbeat_timeout_ms"`
 		}{
-			ElectionTimeoutMs:  200,
-			HeartbeatTimeoutMs: 50,
+			ElectionTimeoutMs:  100, // Optimized: 50% faster than previous 200ms
+			HeartbeatTimeoutMs: 25,  // Optimized: 50% faster than previous 50ms
 		},
 		Logging: struct {
 			Level string `yaml:"level"`
