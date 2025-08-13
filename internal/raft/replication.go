@@ -1,6 +1,8 @@
 package raft
 
 import (
+	"encoding/base64"
+	"encoding/json"
 	"sync"
 	"time"
 
@@ -332,10 +334,42 @@ func (rn *RaftNode) applyCommittedEntries() {
 
 	// Apply entries to state machine
 	for _, entry := range entries {
+		var commandToApply interface{}
+		
 		if entry.Command != nil {
+			commandToApply = entry.Command
+		} else if len(entry.Data) > 0 {
+			// Handle data received via transport (may be double-encoded)
+			var dataBytes []byte = entry.Data
+			
+			// If data looks like a JSON string, try to decode it first
+			if len(entry.Data) > 0 && entry.Data[0] == '"' {
+				var encodedStr string
+				if err := json.Unmarshal(entry.Data, &encodedStr); err == nil {
+					if decodedBytes, err := base64.StdEncoding.DecodeString(encodedStr); err == nil {
+						dataBytes = decodedBytes
+					}
+				}
+			}
+			
+			// Try to deserialize as a KV command
+			if kvCmd, err := DeserializeCommand(dataBytes); err == nil {
+				commandToApply = kvCmd
+			} else {
+				logrus.WithFields(logrus.Fields{
+					"node_id": rn.ID,
+					"index":   entry.Index,
+					"error":   err,
+				}).Debug("Failed to deserialize data as KV command, applying raw data")
+				// If deserialization fails, apply raw data
+				commandToApply = entry.Data
+			}
+		}
+		
+		if commandToApply != nil {
 			applyMsg := ApplyMsg{
 				CommandValid: true,
-				Command:      entry.Command,
+				Command:      commandToApply,
 				CommandIndex: entry.Index,
 			}
 

@@ -1,5 +1,5 @@
 {
-  "current_term": 37,
+  "current_term": 73,
   "voted_for": "node-1",
   "log": [
     {
@@ -12,6 +12,18 @@
       "term": 37,
       "index": 1,
       "command": "eyJ0eXBlIjoiUFVUIiwia2V5IjoidGVzdCIsInZhbHVlIjoidGVzdGluZyBmb3J3YXJkaW5nIGZpeCJ9",
+      "data": null
+    },
+    {
+      "term": 55,
+      "index": 2,
+      "command": "eyJ0eXBlIjoiUFVUIiwia2V5IjoibmV3a2V5IiwidmFsdWUiOiJzdGF0ZSBtYWNoaW5lIGZpeCB0ZXN0In0=",
+      "data": null
+    },
+    {
+      "term": 73,
+      "index": 3,
+      "command": "eyJ0eXBlIjoiUFVUIiwia2V5Ijoic2ltcGxlIiwidmFsdWUiOiJ0ZXN0In0=",
       "data": null
     }
   ]
