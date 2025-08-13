@@ -56,6 +56,13 @@ func CreateRaftNode(config NodeConfig, transport RPCTransport) (*RaftNode, *Raft
 	// Create Raft node
 	raftNode := NewRaftNode(raftConfig)
 	
+	// Initialize snapshot configuration  
+	raftNode.SnapshotConfig = DefaultSnapshotConfig(config.DataDir)
+	
+	// Create and assign state machine
+	kvStateMachine := NewKVStateMachine(config.Logger)
+	raftNode.StateMachine = kvStateMachine
+	
 	// Create KV store
 	kvStore := NewRaftKVStore(raftNode, config.Logger)
 	
