@@ -24,10 +24,12 @@ type NodeInfo struct {
 
 // ClusterConfig contains configuration for the entire cluster
 type ClusterConfig struct {
-	Nodes       map[string]string `json:"nodes"`        // Node ID -> Address
-	BootstrapID string            `json:"bootstrap_id"` // Which node starts the cluster
-	DataDir     string            `json:"data_dir"`
-	Logger      *logrus.Logger    `json:"-"`
+	Nodes            map[string]string `json:"nodes"`            // Node ID -> Address
+	BootstrapID      string            `json:"bootstrap_id"`     // Which node starts the cluster
+	DataDir          string            `json:"data_dir"`
+	ElectionTimeout  time.Duration     `json:"election_timeout"` // Raft election timeout
+	HeartbeatTimeout time.Duration     `json:"heartbeat_timeout"`// Raft heartbeat timeout
+	Logger           *logrus.Logger    `json:"-"`
 }
 
 // Manager manages a cluster of Raft nodes
@@ -97,14 +99,16 @@ func (m *Manager) Start() error {
 	// Create transport
 	m.transport = transport.NewGRPCTransport(localAddress, m.logger)
 	
-	// Create node configuration
-	nodeConfig := raft.DefaultNodeConfig(
-		m.localNodeID,
-		localAddress,
-		peers,
-		m.logger,
-	)
-	nodeConfig.DataDir = fmt.Sprintf("%s/%s", m.config.DataDir, m.localNodeID)
+	// Create node configuration with optimized timing from cluster config
+	nodeConfig := raft.NodeConfig{
+		NodeID:           m.localNodeID,
+		Address:          localAddress,
+		Peers:            peers,
+		ElectionTimeout:  m.config.ElectionTimeout,
+		HeartbeatTimeout: m.config.HeartbeatTimeout,
+		DataDir:          fmt.Sprintf("%s/%s", m.config.DataDir, m.localNodeID),
+		Logger:           m.logger,
+	}
 	
 	// Create Raft node and KV store
 	var err error

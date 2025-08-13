@@ -8,8 +8,8 @@ cluster:
     node-3: "localhost:9003"
 
 raft:
-  election_timeout_ms: 200
-  heartbeat_timeout_ms: 50
+  election_timeout_ms: 100  # Optimized: 50% faster than default 200ms
+  heartbeat_timeout_ms: 25  # Optimized: 50% faster than default 50ms
 
 logging:
   level: "info"
