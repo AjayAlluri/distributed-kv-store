@@ -710,25 +710,5 @@ This project demonstrates **production-level distributed systems engineering**:
 ✅ **Performance Optimized** - 50% faster leader election than standard Raft  
 ✅ **Comprehensive Testing** - Unit tests, integration tests, chaos engineering  
 
----
-
-## 📄 **License**
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ---
-
-## 🙏 **Acknowledgments**
-
-- **Raft Algorithm**: Ongaro & Ousterhout for creating an understandable consensus algorithm
-- **Go Community**: For excellent distributed systems libraries
-- **Production Systems**: etcd, Consul, and Kafka for inspiration
-- **Academic Research**: MIT 6.824 Distributed Systems course materials
-
----
-
-**🎯 Built to demonstrate enterprise-grade distributed systems engineering skills through hands-on implementation of fundamental computer science concepts.**
-
----
-
-*Ready to build the next generation of distributed applications? Start with `./scripts/start-cluster.sh` and explore the future of scalable systems!*
