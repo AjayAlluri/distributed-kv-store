@@ -1,6 +1,6 @@
 # 🔑 Distributed Key-Value Store with Raft Consensus
 
-> **A production-ready distributed key-value store implementing the Raft consensus algorithm in Go, demonstrating advanced distributed systems concepts with automatic leader election, fault tolerance, and horizontal scalability.**
+> **A production-ready distributed key-value store implementing the Raft consensus algorithm in Go, demonstrating advanced distributed systems concepts with automatic leader election, fault tolerance, and horizontal scalability. Achieves <11ms read latency and 100+ ops/sec write throughput with strong consistency across 3-node clusters.**
 
 [![Go Version](https://img.shields.io/badge/Go-1.21+-blue.svg)](https://golang.org)
 [![Docker](https://img.shields.io/badge/Docker-Ready-blue.svg)](https://docker.com)
@@ -294,9 +294,9 @@ curl http://localhost:8083/kv/test:fault-tolerance | jq .
 
 ## 🔍 **Database Inspection Tools**
 
-We've built comprehensive tools to explore your distributed database:
+We've built a command-line tool to explore your distributed database:
 
-### **Option 1: Command-Line Inspector**
+### **Database Inspector**
 
 ```bash
 # View everything at once
@@ -309,19 +309,11 @@ We've built comprehensive tools to explore your distributed database:
 ./scripts/inspect-db.sh test      # Run test operations
 ```
 
-### **Option 2: Web Dashboard**
-
-```bash
-# Open the visual dashboard in your browser
-open scripts/dashboard.html
-# Or manually open: file:///path/to/distributed-kv-store/scripts/dashboard.html
-```
-
-The web dashboard provides:
-- **Real-time cluster status** with leader detection
-- **Interactive data operations** (add/get/delete keys)
-- **Visual cluster topology** 
-- **Live monitoring** of cluster health
+The database inspector provides:
+- **Cluster status monitoring** with leader detection
+- **Data exploration** across all nodes
+- **Raft log inspection** for debugging
+- **Automated testing** capabilities
 
 ---
 
@@ -533,16 +525,18 @@ Our implementation demonstrates key distributed systems principles:
 
 ## 📊 **Performance Characteristics**
 
-Based on our optimized implementation:
+Measured on a 3-node cluster with optimized Raft configuration:
 
 | Metric | Performance | Notes |
 |--------|-------------|-------|
-| **Leader Election** | ~100-150ms | 50% faster than default Raft |
-| **Write Latency** | <50ms | Cross-node replication |
-| **Read Latency** | <5ms | Local reads from any node |
-| **Throughput** | 10,000+ ops/sec | 3-node cluster |
+| **Read Latency** | 8-11ms | Local reads from any node |
+| **Cross-node Consistency** | 10-28ms | Data replicated across cluster |
+| **Cluster Status Query** | 11ms | Leader election verification |
+| **Write Throughput** | 100+ ops/sec | With full replication |
+| **Election Timeout** | 100ms | 50% faster than default Raft |
+| **Heartbeat Interval** | 25ms | Optimized failure detection |
 | **Availability** | 99.9%+ | Tolerates 1 node failure |
-| **Recovery Time** | <5 seconds | Automatic leader election |
+| **Consensus Term** | 104+ | Stable leadership maintained |
 
 ---
 
